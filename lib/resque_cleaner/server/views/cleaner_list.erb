@@ -12,6 +12,9 @@
         <span class="class_filter">
           Class: <%= class_filter("filter_class","c",@klasses,@klass)%>
         </span>
+        <span class="arg_filter">
+          Args: <%= arg_filter("filter_class","arg",@arg)%>
+        </span>
         <span class="exception_filter">
           Exception: <%= exception_filter("filter_class","ex",@exceptions,@exception)%>
         </span>
@@ -55,49 +58,66 @@
   <% end %>
 
   <% start = 0 %>
-  <% failed = @paginate.paginated_jobs%>
+  <% failed = @paginate.paginated_jobs %>
   <% index = 0 %>
   <% date_format = "%Y/%m/%d %T %z" %>
 
   <% if @paginate.max_page > 0 %>
     <%= erb File.read(ResqueCleaner::Server.erb_path("_paginate.erb")) %>
     <ul class='failed'>
-      <%for job in failed%>
+      <%for job_key in failed.keys %>
+        <% jobs = failed[job_key].sort{|a,b| a['failed_at'] <=> a['failed_at'] } %>
+        <% last_job = jobs.first %>
         <% index += 1 %>
         <li>
           <dl>
-            <% if job.nil? %>
+            <% if last_job.nil? %>
             <dt>Error</dt>
-            <dd>Job <%= index%> could not be parsed; perhaps it contains invalid JSON?</dd>
+            <dd>Job <%= index %> could not be parsed; perhaps it contains invalid JSON?</dd>
             <% else %>
             <dt>
-              <input type="checkbox" id="<%=Digest::SHA1.hexdigest job.to_json %>" />
+              <input type="checkbox" id="<%= job_key %>" />
             </dt>
             <dd>&nbsp;</dd>
+            
+            
             <dt>Worker</dt>
             <dd>
-              <a href="<%= u(:workers, job['worker']) %>"><%= job['worker'].split(':')[0...2].join(':') %></a> on <b class='queue-tag'><%= job['queue'] %></b > at <b><span class="time"><%= Time.parse(job['failed_at']).strftime(date_format) %></span></b>
-              <% if job['retried_at'] %>
+              <a href="<%= u(:workers, last_job['worker']) %>"><%= last_job['worker'].split(':')[0...2].join(':') %></a> on <b class='queue-tag'><%= last_job['queue'] %></b > at <b><span class="time"><%= Time.parse(last_job['failed_at']).strftime(date_format) %></span></b>
+              
                 <div class='retried'>
-                  Retried <b><span class="time"><%= job['retried_at'] %></span></b>
+                  <b>Failed <%= jobs.size %> times. </b>
+                  <% if last_job['retried_at'] && !last_job['retried_at'].empty? %>
+                  Retried <b><span class="time"><%= [last_job['retried_at']].flatten.join(", ") %></span></b>
+                  <% end %>
                 </div>
-              <% end %>
+              
             </dd>
             <dt>Class</dt>
-            <dd><code><%= job['payload'] ? job['payload']['class'] : 'nil' %></code></dd>
+            <dd><code><%= last_job['payload'] ? last_job['payload']['class'] : 'nil' %></code></dd>
             <dt>Arguments</dt>
-            <dd><pre><%=h job['payload'] ? show_args(job['payload']['args']) : 'nil' %></pre></dd>
+            <dd><pre><%=h last_job['payload'] ? show_args(last_job['payload']['args']) : 'nil' %></pre></dd>
             <dt>Exception</dt>
-            <dd><code><%= job['exception'] %></code></dd>
+            <dd><code><%= last_job['exception'] %></code></dd>
             <dt>Error</dt>
             <dd class='error'>
-              <% if job['backtrace'] %>
-                <a href="#" class="backtrace"><%= h(job['error']) %></a>
-                <pre style='display:none'><%=h job['backtrace'].join("\n") %></pre>
+              <% if last_job['backtrace'] %>
+                <a href="#" class="backtrace"><%= h(last_job['error']) %></a>
+                <pre style='display:none'><%=h last_job['backtrace'].join("\n") %></pre>
               <% else %>
-                <%=h job['error'] %>
+                <%=h last_job['error'] %>
               <% end %>
             </dd>
+            
+            <% if jobs.size > 1 %>
+            <dt>&nbsp;</dt>
+            <dd>
+              <a href="#" class="more_like_this">Show More like this</a>
+              <div style='display: none;margin-top: 10px;'>
+                <%= erb File.read(ResqueCleaner::Server.erb_path("_job_details.erb")), { :layout => false }, :jobs => jobs.slice(1,jobs.size), :date_format => date_format %>
+              </div>
+            </dd>
+            <% end %>
             <% end %>
           </dl>
           <div class='r'>
@@ -113,6 +133,15 @@
 
 <script>
   $(document).ready(function(){
+    $("a.more_like_this").toggle(
+      function(){
+        $(this).siblings("div").show();
+      },
+      function(){
+        $(this).siblings("div").hide();
+      }
+    )
+    
     $('#select_all_pages').click(function() {
       updateCheckboxStaus();
     });

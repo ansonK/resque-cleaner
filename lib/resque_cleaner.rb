@@ -113,26 +113,31 @@ module Resque
       def requeue(clear_after_requeue=false, options={}, &block)
         requeued = 0
         queue = options["queue"] || options[:queue]
+        job_keys_already_submitted = []
+        
         @limiter.lock do
-          @limiter.jobs.each_with_index do |job,i|
+          @limiter.jobs.reverse.each_with_index do |job,i|
             if !block_given? || block.call(job)
-              index = @limiter.start_index + i - requeued
-
-              if clear_after_requeue
-                # remove job
-                value = redis.lindex(:failed, index)
-                redis.lrem(:failed, 1, value)
-              else
+              
+              # dont queue up the same job again
+              unless job_keys_already_submitted.include? ::ResqueCleaner::Server.job_key(job)
+                index = @limiter.start_index + i - requeued
+                
                 # mark retried
                 job['retried_at'] = Time.now.strftime("%Y/%m/%d %H:%M:%S")
                 redis.lset(:failed, @limiter.start_index+i, Resque.encode(job))
+                  
+  
+                Job.create(queue||job['queue'], job['payload']['class'], *job['payload']['args'])
+                requeued += 1
+                job_keys_already_submitted << ::ResqueCleaner::Server.job_key(job)
               end
-
-              Job.create(queue||job['queue'], job['payload']['class'], *job['payload']['args'])
-              requeued += 1
             end
           end
         end
+        
+        clear(&block) if clear_after_requeue
+        
         requeued
       end
 

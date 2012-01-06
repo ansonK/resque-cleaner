@@ -6,19 +6,31 @@ module ResqueCleaner
     def self.erb_path(filename)
       File.join(File.dirname(__FILE__), 'server', 'views', filename)
     end
+    
     def self.public_path(filename)
       File.join(File.dirname(__FILE__), 'server', 'public', filename)
     end
+    
+    def self.job_key(job)
+        if defined?(Resque::Status)
+          job["payload"]["args"].first
+        else
+          Digest::SHA1.hexdigest job["payload"]["args"].join
+        end
+      end
 
     # Pagination helper for list page.
     class Paginate
-      attr_accessor :page_size, :page, :jobs, :url
+      attr_accessor :page_size, :page, :jobs, :url, :grouped_jobs
       def initialize(jobs, url, page=1, page_size=20)
-        @jobs = jobs
+        @jobs = jobs.group_by{|j| ResqueCleaner::Server.job_key j }
+
         @url = url
         @page = (!page || page < 1) ? 1 : page
         @page_size = 20
-      end
+      end      
+      
+      
 
       def first_index
         @page_size * (@page-1)
@@ -30,7 +42,8 @@ module ResqueCleaner
       end
 
       def paginated_jobs
-        @jobs[first_index,@page_size]
+        selected_keys = @jobs.keys[first_index,@page_size]
+        @jobs.select{|k,v| selected_keys.include?(k) }     
       end
 
       def first_page?
@@ -86,6 +99,10 @@ module ResqueCleaner
               html += "<option #{selected} value=\"#{k}\">#{k}</option>"
             end
             html += "</select>"
+          end
+          
+          def arg_filter(id, name, value)
+            "<input id='#{id}' type='text' name='#{name}' value='#{value}' />"
           end
 
           def exception_filter(id, name, exceptions, value)
@@ -209,6 +226,7 @@ module ResqueCleaner
       @to = params[:t]=="" ? nil : params[:t]
       @klass = params[:c]=="" ? nil : params[:c]
       @exception = params[:ex]=="" ? nil : params[:ex]
+      @arg = params[:arg] == "" ? nil : params[:arg]
     end
 
     def filter_block
@@ -217,7 +235,8 @@ module ResqueCleaner
         (!@to || j.before?(hours_ago(@to))) &&
         (!@klass || j.klass?(@klass)) &&
         (!@exception || j.exception?(@exception)) &&
-        (!@sha1 || @sha1[Digest::SHA1.hexdigest(j.to_json)])
+        (!@arg || j['payload']['args'] && j['payload']['args'].select{|arg| arg != ResqueCleaner::Server.job_key(j) && arg.to_s.match(/#{@arg}/) }.size > 0 ) &&
+        (!@sha1 || @sha1[ResqueCleaner::Server.job_key j])
       }
     end
 

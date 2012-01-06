@@ -1,0 +1,24 @@
+<% for job in jobs %>
+
+  <dl>
+<dt>Worker</dt>
+<dd>
+  <a href="<%= u(:workers, job['worker']) %>"><%= job['worker'].split(':')[0...2].join(':') %></a> 
+  on <b class='queue-tag'><%= job['queue'] %></b > 
+  at <b><span class="time"><%= Time.parse(job['failed_at']).strftime(date_format) %></span></b>. 
+  <% if job['retried_at'] %>Retried at <b><span class="time"><%= Time.parse(job['retried_at']).strftime(date_format) %></span></b><% end %>
+</dd>
+<dt>Exception</dt>
+<dd><code><%= job['exception'] %></code></dd>
+<dt>Error</dt>
+<dd class='error'>
+  <% if job['backtrace'] %>
+  <a href="#" class="backtrace"><%= h(job['error']) %></a>
+  <pre style='display:none'><%=h job['backtrace'].join("\n") %></pre>
+  <% else %>
+  <%=h job['error'] %>
+  <% end %>
+</dd>
+</dl>
+
+<% end %>
