@@ -12,18 +12,18 @@ module ResqueCleaner
     end
     
     def self.job_key(job)
-        if defined?(Resque::Status)
-          job["payload"]["args"].first
-        else
-          Digest::SHA1.hexdigest job["payload"]["args"].join
-        end
+      if defined?(Resque::Plugins::Status)
+        job["payload"]["args"].first
+      else
+        Digest::SHA1.hexdigest job["payload"]["args"].join
       end
+    end
 
     # Pagination helper for list page.
     class Paginate
       attr_accessor :page_size, :page, :jobs, :url, :grouped_jobs
       def initialize(jobs, url, page=1, page_size=20)
-        @jobs = jobs.group_by{|j| ResqueCleaner::Server.job_key j }
+        @jobs = jobs.sort{|b,a| DateTime.parse(a["failed_at"]) <=> DateTime.parse(b["failed_at"]) }.group_by{|j| ResqueCleaner::Server.job_key j }
 
         @url = url
         @page = (!page || page < 1) ? 1 : page
