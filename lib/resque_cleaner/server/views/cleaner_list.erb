@@ -136,9 +136,11 @@
     $("a.more_like_this").toggle(
       function(){
         $(this).siblings("div").show();
+        $(this).html('Hide More like this');
       },
       function(){
         $(this).siblings("div").hide();
+        $(this).html('Shiw More like this');
       }
     )
     
